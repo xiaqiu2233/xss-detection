@@ -4,6 +4,7 @@ process.env.BABEL_ENV = 'main'
 
 const path = require('path')
 const { dependencies } = require('../package.json')
+// 可用于访问内置插件
 const webpack = require('webpack')
 
 const BabiliWebpackPlugin = require('babili-webpack-plugin')
@@ -51,8 +52,13 @@ let mainConfig = {
   plugins: [
     new webpack.NoEmitOnErrorsPlugin()
   ],
+  // 解析器，用于帮助找到模块的绝对路径
   resolve: {
-    extensions: ['.js', '.json', '.node']
+    // 如果路径不具有文件扩展名，将使用 [resolve.extensions] 选项作为文件扩展名来解析
+    extensions: ['.js', '.json', '.node'],
+    alias: {
+      'renderer': path.resolve(__dirname, '../src/renderer/')
+    }
   },
   target: 'electron-main'
 }

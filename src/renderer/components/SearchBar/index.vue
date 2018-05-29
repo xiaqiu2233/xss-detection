@@ -7,33 +7,51 @@
 </template>
 
 <script>
-// import axios from 'renderer/utils/http'
-import Crawler from 'crawler'
+const puppeteer = require('puppeteer')
+const CREDS = require('./creds')
+
+const USERNAME_SELECTOR = '#vwriter'
+const PASSWORD_SELECTOR = '#vpassword'
+const BUTTON_SELECTOR = '#topguideloginform > div:nth-child(4) > button'
+const SHOW_LOGIN = '#js_login'
+const SHOW_LOGIN2 = '#loginWin_content_wrapper > div.loginWin-tab > a.normal-login-tab'
+// const INJECTION_POINT_SELECTOR = ['form', 'input', 'textarea']
+const INJECTION_POINT_SELECTOR = '#top_nav_test'
+
 export default {
-  data: function () {
+  data () {
     return {
-      url: ''
+      url: '',
+      browser: {}
     }
   },
   methods: {
-    handleUrl () {
-      var c = new Crawler({
-        // 在每个请求处理完毕后将调用此回调函数
-        callback: function (error, res, done) {
-          if (error) {
-            console.log(error)
-          } else {
-            console.log(res)
-            var $ = res.$
-            // $ 默认为 Cheerio 解析器
-            // 它是核心jQuery的精简实现，可以按照jQuery选择器语法快速提取DOM元素
-            console.log($('title').text())
-          }
-          done()
-        }
-      })
-      c.queue(this.url)
+    async handleUrl () {
+      const page = await this.browser.newPage()
+      await page.setDefaultNavigationTimeout(100000)
+      await page.goto(this.url)
+      await page.waitForSelector(SHOW_LOGIN)
+      // 登录流程
+      await page.click(SHOW_LOGIN)
+      await page.waitForSelector(SHOW_LOGIN2)
+      await page.click(SHOW_LOGIN2)
+
+      await page.click(USERNAME_SELECTOR)
+      await page.keyboard.type(CREDS.username)
+      await page.click(PASSWORD_SELECTOR)
+      await page.keyboard.type(CREDS.password)
+      await page.click(BUTTON_SELECTOR)
+
+      // 跳转到起始页面
+      await page.evaluate((sel) => {
+        console.log('sb')
+        const udiv = Array.from(sel)
+        return udiv
+      }, INJECTION_POINT_SELECTOR)
     }
+  },
+  async created () {
+    this.browser = await puppeteer.launch({headless: false})
   }
 }
 </script>

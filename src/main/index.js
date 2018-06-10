@@ -1,5 +1,6 @@
 'use strict'
 
+import 'babel-polyfill'
 import { app, BrowserWindow } from 'electron'
 
 /**

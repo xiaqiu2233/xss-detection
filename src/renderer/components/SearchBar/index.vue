@@ -6,8 +6,8 @@
       </Input>
     </div>
     <div class="search-operation">
-      <Button type="primary" v-if="!finding" @click="startSearch">开始爬取</Button>
-      <Button type="error" v-if="finding" @click="stopSearch">结束爬取</Button>
+      <Button type="primary" v-if="ready && !finding" @click="startSearch">开始爬取</Button>
+      <Button type="error" v-if="ready && finding" @click="stopSearch">结束爬取</Button>
     </div>
     <div class="search-list">
       <Table :loading="loading" :columns="columns" :data="data" height="375"></Table>
@@ -20,9 +20,8 @@
 import CREDS from './creds'
 // import { URL } from 'url'
 import db from '../../db/index.js'
-import { queryLinks, getLinks, saveLinks } from '../../utils/crawler.js'
-import { originFilter } from '../../utils/filter.js'
-import { openPage } from '../../utils/browser.js'
+import { getLinksAndInjectPoints, saveLinks, saveInjectPoints } from '../../utils/crawler.js'
+import { openPage, closePage, closeBrowser } from '../../utils/browser.js'
 
 const USERNAME_SELECTOR = '#vwriter'
 const PASSWORD_SELECTOR = '#vpassword'
@@ -38,6 +37,7 @@ export default {
       // url: 'http://blog.tianya.cn/',
       url: 'http://localhost:8080/WebGoat',
       loading: true,
+      ready: false,
       finding: false,
       findTimeout: null,
       browser: {},
@@ -78,42 +78,39 @@ export default {
         {
           url: 'Joe Black',
           visited: true
-        },
-        {
-          url: 'John Brown',
-          visited: true
-        },
-        {
-          url: 'Jim Green',
-          visited: true
-        },
-        {
-          url: 'Joe Black',
-          visited: true
-        },
-        {
-          url: 'John Brown',
-          visited: true
-        },
-        {
-          url: 'Jim Green',
-          visited: true
-        },
-        {
-          url: 'Joe Black',
-          visited: true
-        },
-        {
-          url: 'Jon Snow',
-          visited: true
         }
       ]
     }
   },
   methods: {
     async open () {
-      await openPage(this.url)
-      await db.insert('page', {url: this.url})
+      this.ready = true
+
+      const page = await openPage(this.url)
+      // 先查询
+      const [r] = await db.query('site', {origin: new URL(this.url).origin})
+      if (r) {
+        this.siteInsertId = r.id
+        return
+      } else {
+        // 没有再插入
+        const r = await db.insert('site', {
+          start_url: this.url,
+          origin: new URL(this.url).origin
+        })
+        this.siteInsertId = r.insertId
+      }
+
+      // 先查询
+      const [rr] = await db.query('page', {url: this.url})
+      if (!rr) {
+        await db.insert('page', {
+          site_id: this.siteInsertId,
+          url: this.url
+        })
+      }
+
+      closePage(page)
     },
     async startSearch () {
       // this.finding = true
@@ -126,20 +123,24 @@ export default {
     stopSearch () {
       this.finding = false
     },
+    // 获取1个未访问或的page url
     async findOne () {
       console.log('finding...')
       const [p] = await db.getNoneVisitedPages(false)
       // 没有查询结果的时候，返回
       if (!p) return false
 
-      const urls = await getLinks(p.url)
-      await saveLinks(urls)
+      // 获取所有的 内链 和 可能注入点
+      const {links, injectPoints, activePoints} = await getLinksAndInjectPoints(p.url)
+      await saveLinks(links, p.url)
 
+      await saveInjectPoints(p.url, injectPoints, activePoints)
       const result = await db.updatePageToVisited(p.url)
-      console.log('links: ', urls, result)
+      console.log('links: ', links, result)
       return true
     },
 
+    // 没用了，暂时保留
     async handleUrl () {
       const page = await this.browser.newPage()
       await page.setDefaultNavigationTimeout(100000)
@@ -183,32 +184,6 @@ export default {
       }, '#top_nav_test')
 
       console.log(a)
-    },
-
-    async getUrlFromSameOrigin (url) {
-      this.page = await this.browser.newPage()
-      await this.page.goto(url)
-
-      const result = await this.test(url)
-      console.log(result)
-    },
-
-    async test (url) {
-      const nodeList = await queryLinks(this.page)
-      return nodeList.filter(item => originFilter(item, url))
-    },
-
-    async getAllURL (url, rules) {
-      const result = await this.page.evaluate(() => {
-        const t = document.querySelectorAll('a')
-        // return Array.prototype.slice.call(t)
-        return Array.from(t)
-          .filter(item => item.href.indexOf(origin) !== -1)
-          .map(item => item.href)
-      })
-      console.log(result) // prints "56"
-
-      console.log('url: ' + url)
     }
   },
   async created () {
@@ -224,8 +199,9 @@ export default {
 
   },
   destroyed () {
-    this.browser.close()
-    console.log('destroy', this.browser)
+    closeBrowser()
+    // this.browser.close()
+    // console.log('destroy', this.browser)
   }
 }
 </script>

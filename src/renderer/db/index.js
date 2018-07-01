@@ -1,5 +1,8 @@
 import mysql from 'mysql2/promise'
 
+/**
+ * 数据库对象
+ */
 const db = {
   conn: null,
   config: {
@@ -25,8 +28,10 @@ const db = {
     return result
   },
 
-  async query (table, condition, limit) {
-    let c = Object.entries(condition).map(item => item.join('=')).join(' AND ')
+  async query (table, condition, limit = '') {
+    let c = Object.entries(condition).map(([key, value]) => {
+      return `${key}='${value}'`
+    }).join(' AND ')
     let sql = `SELECT * FROM ${table} WHERE ${c} ${limit}`
     const [result] = await this.conn.query(sql)
     return result
@@ -54,6 +59,14 @@ const db = {
     let sql = `UPDATE page SET visited=? WHERE url=?`
     console.log(sql)
     var sqlParams = [1, url]
+    const [result] = await this.conn.query(sql, sqlParams)
+    return result
+  },
+
+  async updatePageInjectPoints (url, injectPoints) {
+    let sql = `UPDATE inject_points SET inject_point=? WHERE url=?`
+    console.log(sql)
+    var sqlParams = [injectPoints, url]
     const [result] = await this.conn.query(sql, sqlParams)
     return result
   }
